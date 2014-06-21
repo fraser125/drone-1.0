@@ -114,14 +114,7 @@ void turnBTOn(void)
 	delay_ms(100);
 	
 	ioport_set_pin_level(BT_RESET_PIN, false); // Release it from reset.
-	
-	#define BT_STARTUP_DLY_MS 2000
-	for(int i=0; i<BT_STARTUP_DLY_MS; i++)
-	{
-		delay_ms(1);
-		WatchdogPet();
-	}
-	
+	hardwareflowcontrol(16000); // Allow as long as needed
 }
 
 void turnBTOff(void) {
@@ -151,6 +144,7 @@ void initBTComms(const char * modeName)
 	wdt_reset();
 	hardwareflowcontrol(1000);
 	sendBTCmd("BC:BP=04,07,00"); // Use Binary Mode in Release 	
+
 
 	// Long delay to let connection happen
 	wdt_reset();

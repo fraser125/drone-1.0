@@ -53,7 +53,7 @@
 
 //Bluetooth SIG recommends <=80 HID report (10 bytes each) per second
 // 1000/80 = 12.5
-#define REPORT_TIMEOUT_MS 25
+#define REPORT_TIMEOUT_MS 13
 
 #define BUTTON_SAMPLE_TIMEOUT_MS 6
 #define JOYSTICK_SAMPLE_TIMEOUT_MS 6
@@ -61,6 +61,7 @@
 
 //60000 = 60sec
 #define BATTERY_CHECK_TIMEOUT_MS 60000
+//#define BATTERY_CHECK_TIMEOUT_MS 1000
 
 //1000 = 1sec
 #define LED_TIMEOUT_MS 1000
@@ -130,6 +131,8 @@ int main (void)
 	pulse = false;
 	uint16_t battery_level=0u;
 	bool chargingDone;
+	
+	WatchdogPet();  //already enabled in bootloader
 	
 	sysclk_init(); //Initialize System Clock
 	board_init(); //Setup IO
@@ -441,6 +444,7 @@ int main (void)
 			cancelTimeout(&biosModeTimeout);
 			bt_exitBypass();
 			btClearAutoConnectList();
+			setLEDValue(LED_OFF, LED_OFF, LED_OFF); //off
 			setLEDValue(LED_OFF, LED_DIM, LED_OFF); //green
 			delay_ms(2000);
 			reset_do_soft_reset();
