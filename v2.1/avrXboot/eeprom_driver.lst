@@ -1,0 +1,719 @@
+   1               		.file	"eeprom_driver.c"
+   2               	__SP_H__ = 0x3e
+   3               	__SP_L__ = 0x3d
+   4               	__SREG__ = 0x3f
+   5               	__RAMPZ__ = 0x3b
+   6               	__CCP__ = 0x34
+   7               	__tmp_reg__ = 0
+   8               	__zero_reg__ = 1
+  10               		.text
+  11               	.Ltext0:
+ 405               		.section	.text.NVM_EXEC,"ax",@progbits
+ 408               	NVM_EXEC:
+   1:eeprom_driver.c **** /************************************************************************/
+   2:eeprom_driver.c **** /* XMEGA EEPROM Driver                                                  */
+   3:eeprom_driver.c **** /*                                                                      */
+   4:eeprom_driver.c **** /* eeprom.c                                                             */
+   5:eeprom_driver.c **** /*                                                                      */
+   6:eeprom_driver.c **** /* Alex Forencich <alex@alexforencich.com>                              */
+   7:eeprom_driver.c **** /*                                                                      */
+   8:eeprom_driver.c **** /* Copyright (c) 2011 Alex Forencich                                    */
+   9:eeprom_driver.c **** /*                                                                      */
+  10:eeprom_driver.c **** /* Permission is hereby granted, free of charge, to any person          */
+  11:eeprom_driver.c **** /* obtaining a copy of this software and associated documentation       */
+  12:eeprom_driver.c **** /* files(the "Software"), to deal in the Software without restriction,  */
+  13:eeprom_driver.c **** /* including without limitation the rights to use, copy, modify, merge, */
+  14:eeprom_driver.c **** /* publish, distribute, sublicense, and/or sell copies of the Software, */
+  15:eeprom_driver.c **** /* and to permit persons to whom the Software is furnished to do so,    */
+  16:eeprom_driver.c **** /* subject to the following conditions:                                 */
+  17:eeprom_driver.c **** /*                                                                      */
+  18:eeprom_driver.c **** /* The above copyright notice and this permission notice shall be       */
+  19:eeprom_driver.c **** /* included in all copies or substantial portions of the Software.      */
+  20:eeprom_driver.c **** /*                                                                      */
+  21:eeprom_driver.c **** /* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,      */
+  22:eeprom_driver.c **** /* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF   */
+  23:eeprom_driver.c **** /* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND                */
+  24:eeprom_driver.c **** /* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS  */
+  25:eeprom_driver.c **** /* BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN   */
+  26:eeprom_driver.c **** /* ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN    */
+  27:eeprom_driver.c **** /* CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE     */
+  28:eeprom_driver.c **** /* SOFTWARE.                                                            */
+  29:eeprom_driver.c **** /*                                                                      */
+  30:eeprom_driver.c **** /************************************************************************/
+  31:eeprom_driver.c **** 
+  32:eeprom_driver.c **** #include "eeprom_driver.h"
+  33:eeprom_driver.c **** #include "string.h"
+  34:eeprom_driver.c **** 
+  35:eeprom_driver.c **** #ifdef __AVR_XMEGA__
+  36:eeprom_driver.c **** 
+  37:eeprom_driver.c **** // NVM call
+  38:eeprom_driver.c **** static inline void NVM_EXEC(void)
+  39:eeprom_driver.c **** {
+ 410               	.LM0:
+ 411               	.LFBB1:
+ 412               	/* prologue: function */
+ 413               	/* frame size = 0 */
+ 414               	/* stack size = 0 */
+ 415               	.L__stack_usage = 0
+  40:eeprom_driver.c ****         void *z = (void *)&NVM_CTRLA;
+  41:eeprom_driver.c ****         
+  42:eeprom_driver.c ****         __asm__ volatile("out %[ccp], %[ioreg]"  "\n\t"
+ 417               	.LM1:
+ 418 0000 EBEC      		ldi r30,lo8(-53)
+ 419 0002 F1E0      		ldi r31,lo8(1)
+ 420 0004 21E0      		ldi r18,lo8(1)
+ 421 0006 30E0      		ldi r19,0
+ 422 0008 88ED      		ldi r24,lo8(-40)
+ 423 000a 90E0      		ldi r25,0
+ 424               	/* #APP */
+ 425               	 ;  42 "eeprom_driver.c" 1
+ 426 000c 84BF      		out 52, r24
+ 427 000e 2083      		st z, r18
+ 428               	 ;  0 "" 2
+ 429               	/* #NOAPP */
+ 430 0010 0895      		ret
+ 432               	.Lscope1:
+ 433               		.section	.text.wait_for_nvm,"ax",@progbits
+ 435               	.global	wait_for_nvm
+ 437               	wait_for_nvm:
+  43:eeprom_driver.c ****         "st z, %[cmdex]"
+  44:eeprom_driver.c ****         :
+  45:eeprom_driver.c ****         : [ccp] "I" (_SFR_IO_ADDR(CCP)),
+  46:eeprom_driver.c ****         [ioreg] "d" (CCP_IOREG_gc),
+  47:eeprom_driver.c ****                      [cmdex] "r" (NVM_CMDEX_bm),
+  48:eeprom_driver.c ****                      [z] "z" (z)
+  49:eeprom_driver.c ****                      );
+  50:eeprom_driver.c **** }
+  51:eeprom_driver.c **** 
+  52:eeprom_driver.c **** #ifdef USE_AVR1008_EEPROM
+  53:eeprom_driver.c **** 
+  54:eeprom_driver.c **** // Interrupt handler for the EEPROM write "done" interrupt
+  55:eeprom_driver.c **** ISR(NVM_EE_vect)
+  56:eeprom_driver.c **** {
+  57:eeprom_driver.c ****         // Disable the EEPROM interrupt
+  58:eeprom_driver.c ****         NVM.INTCTRL = (NVM.INTCTRL & ~NVM_EELVL_gm);
+  59:eeprom_driver.c **** }
+  60:eeprom_driver.c **** 
+  61:eeprom_driver.c **** // AVR1008 fix
+  62:eeprom_driver.c **** static inline void NVM_EXEC_WRAPPER(void)
+  63:eeprom_driver.c **** {
+  64:eeprom_driver.c ****         // Save the Sleep register
+  65:eeprom_driver.c ****         uint8_t sleepCtr = SLEEP.CTRL;
+  66:eeprom_driver.c ****         // Set sleep mode to IDLE
+  67:eeprom_driver.c ****         SLEEP.CTRL = (SLEEP.CTRL & ~SLEEP.CTRL) | SLEEP_SMODE_IDLE_gc;
+  68:eeprom_driver.c ****         // Save the PMIC Status and control registers
+  69:eeprom_driver.c ****         uint8_t statusStore = PMIC.STATUS;
+  70:eeprom_driver.c ****         uint8_t pmicStore = PMIC.CTRL;
+  71:eeprom_driver.c ****         
+  72:eeprom_driver.c ****         // Enable only the highest level of interrupts
+  73:eeprom_driver.c ****         PMIC.CTRL = (PMIC.CTRL & ~(PMIC_MEDLVLEN_bm | PMIC_LOLVLEN_bm)) | PMIC_HILVLEN_bm;
+  74:eeprom_driver.c ****         // Save SREG for later use
+  75:eeprom_driver.c ****         uint8_t globalInt = SREG;
+  76:eeprom_driver.c ****         // Enable global interrupts
+  77:eeprom_driver.c ****         sei();
+  78:eeprom_driver.c ****         // Set sleep enabled
+  79:eeprom_driver.c ****         SLEEP.CTRL |= SLEEP_SEN_bm;
+  80:eeprom_driver.c ****         // Save eeprom interrupt settings for later
+  81:eeprom_driver.c ****         uint8_t eepromintStore = NVM.INTCTRL;
+  82:eeprom_driver.c ****         NVM_EXEC();
+  83:eeprom_driver.c ****         // Enable EEPROM interrupt
+  84:eeprom_driver.c ****         NVM.INTCTRL =  NVM_EELVL0_bm | NVM_EELVL1_bm;
+  85:eeprom_driver.c ****         // Sleep before 2.5uS has passed
+  86:eeprom_driver.c ****         sleep_cpu();
+  87:eeprom_driver.c ****         // Restore sleep settings
+  88:eeprom_driver.c ****         SLEEP.CTRL = sleepCtr;
+  89:eeprom_driver.c ****         // Restore PMIC status and control registers
+  90:eeprom_driver.c ****         PMIC.STATUS = statusStore;
+  91:eeprom_driver.c ****         PMIC.CTRL = pmicStore;
+  92:eeprom_driver.c ****         // Restore EEPROM interruptsettings
+  93:eeprom_driver.c ****         NVM.INTCTRL = eepromintStore;
+  94:eeprom_driver.c ****         // Restore global interrupt settings
+  95:eeprom_driver.c ****         SREG = globalInt;
+  96:eeprom_driver.c **** }
+  97:eeprom_driver.c **** 
+  98:eeprom_driver.c **** #else
+  99:eeprom_driver.c **** 
+ 100:eeprom_driver.c **** #define NVM_EXEC_WRAPPER NVM_EXEC
+ 101:eeprom_driver.c **** 
+ 102:eeprom_driver.c **** #endif // USE_AVR1008_EEPROM
+ 103:eeprom_driver.c **** 
+ 104:eeprom_driver.c **** 
+ 105:eeprom_driver.c **** void wait_for_nvm(void)
+ 106:eeprom_driver.c **** {
+ 439               	.LM2:
+ 440               	.LFBB2:
+ 441               	/* prologue: function */
+ 442               	/* frame size = 0 */
+ 443               	/* stack size = 0 */
+ 444               	.L__stack_usage = 0
+ 445               	.L4:
+ 107:eeprom_driver.c ****         while (NVM.STATUS & NVM_NVMBUSY_bm) { };
+ 447               	.LM3:
+ 448 0000 8091 CF01 		lds r24,463
+ 449 0004 87FD      		sbrc r24,7
+ 450 0006 00C0      		rjmp .L4
+ 451               	/* epilogue start */
+ 108:eeprom_driver.c **** }
+ 453               	.LM4:
+ 454 0008 0895      		ret
+ 456               	.Lscope2:
+ 457               		.section	.text.flush_buffer,"ax",@progbits
+ 459               	.global	flush_buffer
+ 461               	flush_buffer:
+ 109:eeprom_driver.c **** 
+ 110:eeprom_driver.c **** void flush_buffer(void)
+ 111:eeprom_driver.c **** {
+ 463               	.LM5:
+ 464               	.LFBB3:
+ 465               	/* prologue: function */
+ 466               	/* frame size = 0 */
+ 467               	/* stack size = 0 */
+ 468               	.L__stack_usage = 0
+ 112:eeprom_driver.c ****         wait_for_nvm();
+ 470               	.LM6:
+ 471 0000 0E94 0000 		call wait_for_nvm
+ 113:eeprom_driver.c ****         
+ 114:eeprom_driver.c ****         if ((NVM.STATUS & NVM_EELOAD_bm) != 0) {
+ 473               	.LM7:
+ 474 0004 8091 CF01 		lds r24,463
+ 475 0008 81FF      		sbrs r24,1
+ 476 000a 00C0      		rjmp .L6
+ 115:eeprom_driver.c ****                 NVM.CMD = NVM_CMD_ERASE_EEPROM_BUFFER_gc;
+ 478               	.LM8:
+ 479 000c 86E3      		ldi r24,lo8(54)
+ 480 000e 8093 CA01 		sts 458,r24
+ 116:eeprom_driver.c ****                 NVM_EXEC();
+ 482               	.LM9:
+ 483 0012 0C94 0000 		jmp NVM_EXEC
+ 484               	.L6:
+ 485 0016 0895      		ret
+ 487               	.Lscope3:
+ 488               		.section	.text.EEPROM_read_byte,"ax",@progbits
+ 490               	.global	EEPROM_read_byte
+ 492               	EEPROM_read_byte:
+ 117:eeprom_driver.c ****         }
+ 118:eeprom_driver.c **** }
+ 119:eeprom_driver.c **** 
+ 120:eeprom_driver.c **** 
+ 121:eeprom_driver.c **** uint8_t EEPROM_read_byte(uint16_t addr)
+ 122:eeprom_driver.c **** {
+ 494               	.LM10:
+ 495               	.LFBB4:
+ 496 0000 0F93      		push r16
+ 497 0002 1F93      		push r17
+ 498 0004 CF93      		push r28
+ 499 0006 DF93      		push r29
+ 500 0008 00D0      		rcall .
+ 501 000a CDB7      		in r28,__SP_L__
+ 502 000c DEB7      		in r29,__SP_H__
+ 503               	/* prologue: function */
+ 504               	/* frame size = 2 */
+ 505               	/* stack size = 6 */
+ 506               	.L__stack_usage = 6
+ 123:eeprom_driver.c ****         wait_for_nvm();
+ 508               	.LM11:
+ 509 000e 8983      		std Y+1,r24
+ 510 0010 9A83      		std Y+2,r25
+ 511 0012 0E94 0000 		call wait_for_nvm
+ 124:eeprom_driver.c ****         
+ 125:eeprom_driver.c ****         NVM.ADDR0 = addr & 0xFF;
+ 513               	.LM12:
+ 514 0016 00EC      		ldi r16,lo8(-64)
+ 515 0018 11E0      		ldi r17,lo8(1)
+ 516 001a 8981      		ldd r24,Y+1
+ 517 001c F801      		movw r30,r16
+ 518 001e 8083      		st Z,r24
+ 126:eeprom_driver.c ****         NVM.ADDR1 = (addr >> 8) & 0x1F;
+ 520               	.LM13:
+ 521 0020 9A81      		ldd r25,Y+2
+ 522 0022 9F71      		andi r25,lo8(31)
+ 523 0024 9183      		std Z+1,r25
+ 127:eeprom_driver.c ****         NVM.ADDR2 = 0;
+ 525               	.LM14:
+ 526 0026 1282      		std Z+2,__zero_reg__
+ 128:eeprom_driver.c ****         
+ 129:eeprom_driver.c ****         NVM.CMD = NVM_CMD_READ_EEPROM_gc;
+ 528               	.LM15:
+ 529 0028 86E0      		ldi r24,lo8(6)
+ 530 002a 8287      		std Z+10,r24
+ 130:eeprom_driver.c ****         NVM_EXEC();
+ 532               	.LM16:
+ 533 002c 0E94 0000 		call NVM_EXEC
+ 131:eeprom_driver.c ****         
+ 132:eeprom_driver.c ****         return NVM.DATA0;
+ 535               	.LM17:
+ 536 0030 F801      		movw r30,r16
+ 537 0032 8481      		ldd r24,Z+4
+ 538               	/* epilogue start */
+ 133:eeprom_driver.c **** }
+ 540               	.LM18:
+ 541 0034 0F90      		pop __tmp_reg__
+ 542 0036 0F90      		pop __tmp_reg__
+ 543 0038 DF91      		pop r29
+ 544 003a CF91      		pop r28
+ 545 003c 1F91      		pop r17
+ 546 003e 0F91      		pop r16
+ 547 0040 0895      		ret
+ 549               	.Lscope4:
+ 550               		.section	.text.EEPROM_write_byte,"ax",@progbits
+ 553               	.global	EEPROM_write_byte
+ 555               	EEPROM_write_byte:
+ 134:eeprom_driver.c **** 
+ 135:eeprom_driver.c **** 
+ 136:eeprom_driver.c **** void EEPROM_write_byte(uint16_t addr, uint8_t byte)
+ 137:eeprom_driver.c **** {
+ 557               	.LM19:
+ 558               	.LFBB5:
+ 559 0000 CF93      		push r28
+ 560 0002 DF93      		push r29
+ 561 0004 00D0      		rcall .
+ 562 0006 1F92      		push __zero_reg__
+ 563 0008 CDB7      		in r28,__SP_L__
+ 564 000a DEB7      		in r29,__SP_H__
+ 565               	/* prologue: function */
+ 566               	/* frame size = 3 */
+ 567               	/* stack size = 5 */
+ 568               	.L__stack_usage = 5
+ 138:eeprom_driver.c ****         flush_buffer();
+ 570               	.LM20:
+ 571 000c 6983      		std Y+1,r22
+ 572 000e 8A83      		std Y+2,r24
+ 573 0010 9B83      		std Y+3,r25
+ 574 0012 0E94 0000 		call flush_buffer
+ 139:eeprom_driver.c ****         NVM.CMD = NVM_CMD_LOAD_EEPROM_BUFFER_gc;
+ 576               	.LM21:
+ 577 0016 E0EC      		ldi r30,lo8(-64)
+ 578 0018 F1E0      		ldi r31,lo8(1)
+ 579 001a 23E3      		ldi r18,lo8(51)
+ 580 001c 2287      		std Z+10,r18
+ 140:eeprom_driver.c ****         
+ 141:eeprom_driver.c ****         NVM.ADDR0 = addr & 0xFF;
+ 582               	.LM22:
+ 583 001e 8A81      		ldd r24,Y+2
+ 584 0020 8083      		st Z,r24
+ 142:eeprom_driver.c ****         NVM.ADDR1 = (addr >> 8) & 0x1F;
+ 586               	.LM23:
+ 587 0022 9B81      		ldd r25,Y+3
+ 588 0024 9F71      		andi r25,lo8(31)
+ 589 0026 9183      		std Z+1,r25
+ 143:eeprom_driver.c ****         NVM.ADDR2 = 0;
+ 591               	.LM24:
+ 592 0028 1282      		std Z+2,__zero_reg__
+ 144:eeprom_driver.c ****         
+ 145:eeprom_driver.c ****         NVM.DATA0 = byte;
+ 594               	.LM25:
+ 595 002a 6981      		ldd r22,Y+1
+ 596 002c 6483      		std Z+4,r22
+ 146:eeprom_driver.c ****         
+ 147:eeprom_driver.c ****         NVM.CMD = NVM_CMD_ERASE_WRITE_EEPROM_PAGE_gc;
+ 598               	.LM26:
+ 599 002e 85E3      		ldi r24,lo8(53)
+ 600 0030 8287      		std Z+10,r24
+ 601               	/* epilogue start */
+ 148:eeprom_driver.c ****         NVM_EXEC_WRAPPER();
+ 149:eeprom_driver.c **** }
+ 603               	.LM27:
+ 604 0032 2396      		adiw r28,3
+ 605 0034 CDBF      		out __SP_L__,r28
+ 606 0036 DEBF      		out __SP_H__,r29
+ 607 0038 DF91      		pop r29
+ 608 003a CF91      		pop r28
+ 148:eeprom_driver.c ****         NVM_EXEC_WRAPPER();
+ 610               	.LM28:
+ 611 003c 0C94 0000 		jmp NVM_EXEC
+ 613               	.Lscope5:
+ 614               		.section	.text.EEPROM_read_block,"ax",@progbits
+ 618               	.global	EEPROM_read_block
+ 620               	EEPROM_read_block:
+ 150:eeprom_driver.c **** 
+ 151:eeprom_driver.c **** 
+ 152:eeprom_driver.c **** uint16_t EEPROM_read_block(uint16_t addr, uint8_t *dest, uint16_t len)
+ 153:eeprom_driver.c **** {
+ 622               	.LM29:
+ 623               	.LFBB6:
+ 624 0000 8F92      		push r8
+ 625 0002 9F92      		push r9
+ 626 0004 BF92      		push r11
+ 627 0006 CF92      		push r12
+ 628 0008 DF92      		push r13
+ 629 000a EF92      		push r14
+ 630 000c FF92      		push r15
+ 631 000e 0F93      		push r16
+ 632 0010 1F93      		push r17
+ 633 0012 CF93      		push r28
+ 634 0014 DF93      		push r29
+ 635 0016 00D0      		rcall .
+ 636 0018 CDB7      		in r28,__SP_L__
+ 637 001a DEB7      		in r29,__SP_H__
+ 638               	/* prologue: function */
+ 639               	/* frame size = 2 */
+ 640               	/* stack size = 13 */
+ 641               	.L__stack_usage = 13
+ 642 001c 4C01      		movw r8,r24
+ 643 001e 7A01      		movw r14,r20
+ 154:eeprom_driver.c ****         uint16_t cnt = 0;
+ 155:eeprom_driver.c ****         
+ 156:eeprom_driver.c ****         NVM.ADDR2 = 0;
+ 645               	.LM30:
+ 646 0020 1092 C201 		sts 450,__zero_reg__
+ 157:eeprom_driver.c ****         
+ 158:eeprom_driver.c ****         wait_for_nvm();
+ 648               	.LM31:
+ 649 0024 6983      		std Y+1,r22
+ 650 0026 7A83      		std Y+2,r23
+ 651 0028 0E94 0000 		call wait_for_nvm
+ 652 002c 6981      		ldd r22,Y+1
+ 653 002e 062F      		mov r16,r22
+ 654 0030 7A81      		ldd r23,Y+2
+ 655 0032 172F      		mov r17,r23
+ 656 0034 6401      		movw r12,r8
+ 657 0036 CE0C      		add r12,r14
+ 658 0038 DF1C      		adc r13,r15
+ 159:eeprom_driver.c ****         
+ 160:eeprom_driver.c ****         while (len > 0)
+ 161:eeprom_driver.c ****         {
+ 162:eeprom_driver.c ****                 NVM.ADDR0 = addr & 0xFF;
+ 163:eeprom_driver.c ****                 NVM.ADDR1 = (addr >> 8) & 0x1F;
+ 164:eeprom_driver.c ****                 
+ 165:eeprom_driver.c ****                 NVM.CMD = NVM_CMD_READ_EEPROM_gc;
+ 660               	.LM32:
+ 661 003a 86E0      		ldi r24,lo8(6)
+ 662 003c B82E      		mov r11,r24
+ 663               	.L11:
+ 160:eeprom_driver.c ****         {
+ 665               	.LM33:
+ 666 003e 8C14      		cp r8,r12
+ 667 0040 9D04      		cpc r9,r13
+ 668 0042 01F0      		breq .L13
+ 162:eeprom_driver.c ****                 NVM.ADDR1 = (addr >> 8) & 0x1F;
+ 670               	.LM34:
+ 671 0044 8092 C001 		sts 448,r8
+ 163:eeprom_driver.c ****                 
+ 673               	.LM35:
+ 674 0048 892D      		mov r24,r9
+ 675 004a 8F71      		andi r24,lo8(31)
+ 676 004c 8093 C101 		sts 449,r24
+ 678               	.LM36:
+ 679 0050 B092 CA01 		sts 458,r11
+ 166:eeprom_driver.c ****                 NVM_EXEC();
+ 681               	.LM37:
+ 682 0054 0E94 0000 		call NVM_EXEC
+ 167:eeprom_driver.c ****                 
+ 168:eeprom_driver.c ****                 *(dest++) = NVM.DATA0; addr++;
+ 684               	.LM38:
+ 685 0058 8091 C401 		lds r24,452
+ 686 005c F801      		movw r30,r16
+ 687 005e 8193      		st Z+,r24
+ 688 0060 8F01      		movw r16,r30
+ 689 0062 FFEF      		ldi r31,-1
+ 690 0064 8F1A      		sub r8,r31
+ 691 0066 9F0A      		sbc r9,r31
+ 692 0068 00C0      		rjmp .L11
+ 693               	.L13:
+ 169:eeprom_driver.c ****                 
+ 170:eeprom_driver.c ****                 len--; cnt++;
+ 171:eeprom_driver.c ****         }
+ 172:eeprom_driver.c ****         return cnt;
+ 173:eeprom_driver.c **** }
+ 695               	.LM39:
+ 696 006a C701      		movw r24,r14
+ 697               	/* epilogue start */
+ 698 006c 0F90      		pop __tmp_reg__
+ 699 006e 0F90      		pop __tmp_reg__
+ 700 0070 DF91      		pop r29
+ 701 0072 CF91      		pop r28
+ 702 0074 1F91      		pop r17
+ 703 0076 0F91      		pop r16
+ 704 0078 FF90      		pop r15
+ 705 007a EF90      		pop r14
+ 706 007c DF90      		pop r13
+ 707 007e CF90      		pop r12
+ 708 0080 BF90      		pop r11
+ 709 0082 9F90      		pop r9
+ 710 0084 8F90      		pop r8
+ 711 0086 0895      		ret
+ 713               	.Lscope6:
+ 714               		.section	.text.EEPROM_write_block,"ax",@progbits
+ 717               	.global	EEPROM_write_block
+ 719               	EEPROM_write_block:
+ 174:eeprom_driver.c **** 
+ 175:eeprom_driver.c **** 
+ 176:eeprom_driver.c **** uint16_t EEPROM_write_block(uint16_t addr, const uint8_t *src, uint16_t len)
+ 177:eeprom_driver.c **** {
+ 721               	.LM40:
+ 722               	.LFBB7:
+ 723 0000 8F92      		push r8
+ 724 0002 9F92      		push r9
+ 725 0004 AF92      		push r10
+ 726 0006 BF92      		push r11
+ 727 0008 CF92      		push r12
+ 728 000a DF92      		push r13
+ 729 000c EF92      		push r14
+ 730 000e FF92      		push r15
+ 731 0010 0F93      		push r16
+ 732 0012 1F93      		push r17
+ 733 0014 CF93      		push r28
+ 734 0016 DF93      		push r29
+ 735 0018 00D0      		rcall .
+ 736 001a 1F92      		push __zero_reg__
+ 737 001c CDB7      		in r28,__SP_L__
+ 738 001e DEB7      		in r29,__SP_H__
+ 739               	/* prologue: function */
+ 740               	/* frame size = 3 */
+ 741               	/* stack size = 15 */
+ 742               	.L__stack_usage = 15
+ 743 0020 6A01      		movw r12,r20
+ 178:eeprom_driver.c ****         uint8_t byte_addr = addr % EEPROM_PAGE_SIZE;
+ 745               	.LM41:
+ 746 0022 282F      		mov r18,r24
+ 747 0024 2F71      		andi r18,lo8(31)
+ 179:eeprom_driver.c ****         uint16_t page_addr = addr - byte_addr;
+ 749               	.LM42:
+ 750 0026 8C01      		movw r16,r24
+ 751 0028 021B      		sub r16,r18
+ 752 002a 1109      		sbc r17,__zero_reg__
+ 180:eeprom_driver.c ****         uint16_t cnt = 0;
+ 181:eeprom_driver.c ****         
+ 182:eeprom_driver.c ****         flush_buffer();
+ 754               	.LM43:
+ 755 002c 2983      		std Y+1,r18
+ 756 002e 6A83      		std Y+2,r22
+ 757 0030 7B83      		std Y+3,r23
+ 758 0032 0E94 0000 		call flush_buffer
+ 183:eeprom_driver.c ****         wait_for_nvm();
+ 760               	.LM44:
+ 761 0036 0E94 0000 		call wait_for_nvm
+ 184:eeprom_driver.c ****         NVM.CMD = NVM_CMD_LOAD_EEPROM_BUFFER_gc;
+ 763               	.LM45:
+ 764 003a 83E3      		ldi r24,lo8(51)
+ 765 003c 8093 CA01 		sts 458,r24
+ 185:eeprom_driver.c ****         
+ 186:eeprom_driver.c ****         NVM.ADDR1 = 0;
+ 767               	.LM46:
+ 768 0040 1092 C101 		sts 449,__zero_reg__
+ 187:eeprom_driver.c ****         NVM.ADDR2 = 0;
+ 770               	.LM47:
+ 771 0044 1092 C201 		sts 450,__zero_reg__
+ 772 0048 6A81      		ldd r22,Y+2
+ 773 004a E62E      		mov r14,r22
+ 774 004c 7B81      		ldd r23,Y+3
+ 775 004e F72E      		mov r15,r23
+ 188:eeprom_driver.c ****         
+ 189:eeprom_driver.c ****         while (len > 0)
+ 777               	.LM48:
+ 778 0050 4601      		movw r8,r12
+ 190:eeprom_driver.c ****         {
+ 191:eeprom_driver.c ****                 NVM.ADDR0 = byte_addr;
+ 192:eeprom_driver.c ****                 
+ 193:eeprom_driver.c ****                 NVM.DATA0 = *(src++);
+ 194:eeprom_driver.c ****                 
+ 195:eeprom_driver.c ****                 byte_addr++;
+ 196:eeprom_driver.c ****                 len--;
+ 197:eeprom_driver.c ****                 
+ 198:eeprom_driver.c ****                 if (len == 0 || byte_addr >= EEPROM_PAGE_SIZE)
+ 199:eeprom_driver.c ****                 {
+ 200:eeprom_driver.c ****                         NVM.ADDR0 = page_addr & 0xFF;
+ 201:eeprom_driver.c ****                         NVM.ADDR1 = (page_addr >> 8) & 0x1F;
+ 202:eeprom_driver.c ****                         
+ 203:eeprom_driver.c ****                         NVM.CMD = NVM_CMD_ERASE_WRITE_EEPROM_PAGE_gc;
+ 780               	.LM49:
+ 781 0052 95E3      		ldi r25,lo8(53)
+ 782 0054 B92E      		mov r11,r25
+ 204:eeprom_driver.c ****                         NVM_EXEC();
+ 205:eeprom_driver.c ****                         
+ 206:eeprom_driver.c ****                         page_addr += EEPROM_PAGE_SIZE;
+ 207:eeprom_driver.c ****                         byte_addr = 0;
+ 208:eeprom_driver.c ****                         
+ 209:eeprom_driver.c ****                         wait_for_nvm();
+ 210:eeprom_driver.c ****                         
+ 211:eeprom_driver.c ****                         NVM.CMD = NVM_CMD_LOAD_EEPROM_BUFFER_gc;
+ 784               	.LM50:
+ 785 0056 23E3      		ldi r18,lo8(51)
+ 786 0058 A22E      		mov r10,r18
+ 189:eeprom_driver.c ****         {
+ 788               	.LM51:
+ 789 005a 2981      		ldd r18,Y+1
+ 790               	.L15:
+ 189:eeprom_driver.c ****         {
+ 792               	.LM52:
+ 793 005c 8114      		cp r8,__zero_reg__
+ 794 005e 9104      		cpc r9,__zero_reg__
+ 795 0060 01F0      		breq .L22
+ 191:eeprom_driver.c ****                 
+ 797               	.LM53:
+ 798 0062 2093 C001 		sts 448,r18
+ 193:eeprom_driver.c ****                 
+ 800               	.LM54:
+ 801 0066 F701      		movw r30,r14
+ 802 0068 8191      		ld r24,Z+
+ 803 006a 7F01      		movw r14,r30
+ 804 006c 8093 C401 		sts 452,r24
+ 196:eeprom_driver.c ****                 
+ 806               	.LM55:
+ 807 0070 F1E0      		ldi r31,1
+ 808 0072 8F1A      		sub r8,r31
+ 809 0074 9108      		sbc r9,__zero_reg__
+ 198:eeprom_driver.c ****                 {
+ 811               	.LM56:
+ 812 0076 8114      		cp r8,__zero_reg__
+ 813 0078 9104      		cpc r9,__zero_reg__
+ 814 007a 01F0      		breq .L16
+ 195:eeprom_driver.c ****                 len--;
+ 816               	.LM57:
+ 817 007c 2F5F      		subi r18,lo8(-(1))
+ 198:eeprom_driver.c ****                 {
+ 819               	.LM58:
+ 820 007e 2032      		cpi r18,lo8(32)
+ 821 0080 01F4      		brne .L15
+ 822               	.L16:
+ 200:eeprom_driver.c ****                         NVM.ADDR1 = (page_addr >> 8) & 0x1F;
+ 824               	.LM59:
+ 825 0082 0093 C001 		sts 448,r16
+ 201:eeprom_driver.c ****                         
+ 827               	.LM60:
+ 828 0086 812F      		mov r24,r17
+ 829 0088 8F71      		andi r24,lo8(31)
+ 830 008a 8093 C101 		sts 449,r24
+ 203:eeprom_driver.c ****                         NVM_EXEC();
+ 832               	.LM61:
+ 833 008e B092 CA01 		sts 458,r11
+ 204:eeprom_driver.c ****                         
+ 835               	.LM62:
+ 836 0092 0E94 0000 		call NVM_EXEC
+ 206:eeprom_driver.c ****                         byte_addr = 0;
+ 838               	.LM63:
+ 839 0096 005E      		subi r16,-32
+ 840 0098 1F4F      		sbci r17,-1
+ 209:eeprom_driver.c ****                         
+ 842               	.LM64:
+ 843 009a 0E94 0000 		call wait_for_nvm
+ 845               	.LM65:
+ 846 009e A092 CA01 		sts 458,r10
+ 207:eeprom_driver.c ****                         
+ 848               	.LM66:
+ 849 00a2 20E0      		ldi r18,0
+ 850 00a4 00C0      		rjmp .L15
+ 851               	.L22:
+ 212:eeprom_driver.c ****                 }
+ 213:eeprom_driver.c ****                 
+ 214:eeprom_driver.c ****                 cnt++;
+ 215:eeprom_driver.c ****         }
+ 216:eeprom_driver.c ****         
+ 217:eeprom_driver.c ****         return cnt;
+ 218:eeprom_driver.c **** }
+ 853               	.LM67:
+ 854 00a6 C601      		movw r24,r12
+ 855               	/* epilogue start */
+ 856 00a8 2396      		adiw r28,3
+ 857 00aa CDBF      		out __SP_L__,r28
+ 858 00ac DEBF      		out __SP_H__,r29
+ 859 00ae DF91      		pop r29
+ 860 00b0 CF91      		pop r28
+ 861 00b2 1F91      		pop r17
+ 862 00b4 0F91      		pop r16
+ 863 00b6 FF90      		pop r15
+ 864 00b8 EF90      		pop r14
+ 865 00ba DF90      		pop r13
+ 866 00bc CF90      		pop r12
+ 867 00be BF90      		pop r11
+ 868 00c0 AF90      		pop r10
+ 869 00c2 9F90      		pop r9
+ 870 00c4 8F90      		pop r8
+ 871 00c6 0895      		ret
+ 877               	.Lscope7:
+ 878               		.section	.text.EEPROM_erase_page,"ax",@progbits
+ 880               	.global	EEPROM_erase_page
+ 882               	EEPROM_erase_page:
+ 219:eeprom_driver.c **** 
+ 220:eeprom_driver.c **** 
+ 221:eeprom_driver.c **** void EEPROM_erase_page(uint16_t addr)
+ 222:eeprom_driver.c **** {
+ 884               	.LM68:
+ 885               	.LFBB8:
+ 886 0000 CF93      		push r28
+ 887 0002 DF93      		push r29
+ 888               	/* prologue: function */
+ 889               	/* frame size = 0 */
+ 890               	/* stack size = 2 */
+ 891               	.L__stack_usage = 2
+ 223:eeprom_driver.c ****         NVM.ADDR0 = addr & 0xFF;
+ 893               	.LM69:
+ 894 0004 C0EC      		ldi r28,lo8(-64)
+ 895 0006 D1E0      		ldi r29,lo8(1)
+ 896 0008 8883      		st Y,r24
+ 224:eeprom_driver.c ****         NVM.ADDR1 = (addr >> 8) & 0x1F;
+ 898               	.LM70:
+ 899 000a 9F71      		andi r25,lo8(31)
+ 900 000c 9983      		std Y+1,r25
+ 225:eeprom_driver.c ****         NVM.ADDR2 = 0;
+ 902               	.LM71:
+ 903 000e 1A82      		std Y+2,__zero_reg__
+ 226:eeprom_driver.c ****         
+ 227:eeprom_driver.c ****         wait_for_nvm();
+ 905               	.LM72:
+ 906 0010 0E94 0000 		call wait_for_nvm
+ 228:eeprom_driver.c ****         
+ 229:eeprom_driver.c ****         NVM.CMD = NVM_CMD_ERASE_EEPROM_PAGE_gc;
+ 908               	.LM73:
+ 909 0014 82E3      		ldi r24,lo8(50)
+ 910 0016 8A87      		std Y+10,r24
+ 911               	/* epilogue start */
+ 230:eeprom_driver.c ****         NVM_EXEC_WRAPPER();
+ 231:eeprom_driver.c **** }
+ 913               	.LM74:
+ 914 0018 DF91      		pop r29
+ 915 001a CF91      		pop r28
+ 230:eeprom_driver.c ****         NVM_EXEC_WRAPPER();
+ 917               	.LM75:
+ 918 001c 0C94 0000 		jmp NVM_EXEC
+ 920               	.Lscope8:
+ 921               		.section	.text.EEPROM_erase_all,"ax",@progbits
+ 923               	.global	EEPROM_erase_all
+ 925               	EEPROM_erase_all:
+ 232:eeprom_driver.c **** 
+ 233:eeprom_driver.c **** 
+ 234:eeprom_driver.c **** void EEPROM_erase_all(void)
+ 235:eeprom_driver.c **** {
+ 927               	.LM76:
+ 928               	.LFBB9:
+ 929               	/* prologue: function */
+ 930               	/* frame size = 0 */
+ 931               	/* stack size = 0 */
+ 932               	.L__stack_usage = 0
+ 236:eeprom_driver.c ****         wait_for_nvm();
+ 934               	.LM77:
+ 935 0000 0E94 0000 		call wait_for_nvm
+ 237:eeprom_driver.c ****         
+ 238:eeprom_driver.c ****         NVM.CMD = NVM_CMD_ERASE_EEPROM_gc;
+ 937               	.LM78:
+ 938 0004 80E3      		ldi r24,lo8(48)
+ 939 0006 E0EC      		ldi r30,lo8(-64)
+ 940 0008 F1E0      		ldi r31,lo8(1)
+ 941 000a 8287      		std Z+10,r24
+ 239:eeprom_driver.c ****         NVM_EXEC_WRAPPER();
+ 943               	.LM79:
+ 944 000c 0C94 0000 		jmp NVM_EXEC
+ 946               	.Lscope9:
+ 947               		.text
+ 949               	.Letext0:
+ 950               		.ident	"GCC: (AVR_8_bit_GNU_Toolchain_3.4.4_1229) 4.8.1"
+DEFINED SYMBOLS
+                            *ABS*:00000000 eeprom_driver.c
+C:\Users\Matthew\AppData\Local\Temp\cc5Blsce.s:2      *ABS*:0000003e __SP_H__
+C:\Users\Matthew\AppData\Local\Temp\cc5Blsce.s:3      *ABS*:0000003d __SP_L__
+C:\Users\Matthew\AppData\Local\Temp\cc5Blsce.s:4      *ABS*:0000003f __SREG__
+C:\Users\Matthew\AppData\Local\Temp\cc5Blsce.s:5      *ABS*:0000003b __RAMPZ__
+C:\Users\Matthew\AppData\Local\Temp\cc5Blsce.s:6      *ABS*:00000034 __CCP__
+C:\Users\Matthew\AppData\Local\Temp\cc5Blsce.s:7      *ABS*:00000000 __tmp_reg__
+C:\Users\Matthew\AppData\Local\Temp\cc5Blsce.s:8      *ABS*:00000001 __zero_reg__
+C:\Users\Matthew\AppData\Local\Temp\cc5Blsce.s:408    .text.NVM_EXEC:00000000 NVM_EXEC
+C:\Users\Matthew\AppData\Local\Temp\cc5Blsce.s:437    .text.wait_for_nvm:00000000 wait_for_nvm
+C:\Users\Matthew\AppData\Local\Temp\cc5Blsce.s:461    .text.flush_buffer:00000000 flush_buffer
+C:\Users\Matthew\AppData\Local\Temp\cc5Blsce.s:492    .text.EEPROM_read_byte:00000000 EEPROM_read_byte
+C:\Users\Matthew\AppData\Local\Temp\cc5Blsce.s:555    .text.EEPROM_write_byte:00000000 EEPROM_write_byte
+C:\Users\Matthew\AppData\Local\Temp\cc5Blsce.s:620    .text.EEPROM_read_block:00000000 EEPROM_read_block
+C:\Users\Matthew\AppData\Local\Temp\cc5Blsce.s:719    .text.EEPROM_write_block:00000000 EEPROM_write_block
+C:\Users\Matthew\AppData\Local\Temp\cc5Blsce.s:882    .text.EEPROM_erase_page:00000000 EEPROM_erase_page
+C:\Users\Matthew\AppData\Local\Temp\cc5Blsce.s:925    .text.EEPROM_erase_all:00000000 EEPROM_erase_all
+
+NO UNDEFINED SYMBOLS

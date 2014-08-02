@@ -1,0 +1,124 @@
+   1               		.file	"watchdog.c"
+   2               	__SP_H__ = 0x3e
+   3               	__SP_L__ = 0x3d
+   4               	__SREG__ = 0x3f
+   5               	__RAMPZ__ = 0x3b
+   6               	__CCP__ = 0x34
+   7               	__tmp_reg__ = 0
+   8               	__zero_reg__ = 1
+  10               		.text
+  11               	.Ltext0:
+ 405               		.section	.text.WDT_EnableAndSetTimeout,"ax",@progbits
+ 407               	.global	WDT_EnableAndSetTimeout
+ 409               	WDT_EnableAndSetTimeout:
+   1:watchdog.c    **** /************************************************************************/
+   2:watchdog.c    **** /* XBoot Extensible AVR Bootloader                                      */
+   3:watchdog.c    **** /*                                                                      */
+   4:watchdog.c    **** /* Watchdog Module                                                      */
+   5:watchdog.c    **** /*                                                                      */
+   6:watchdog.c    **** /* watchdog.c                                                           */
+   7:watchdog.c    **** /*                                                                      */
+   8:watchdog.c    **** /* Alex Forencich <alex@alexforencich.com>                              */
+   9:watchdog.c    **** /*                                                                      */
+  10:watchdog.c    **** /* Copyright (c) 2010 Alex Forencich                                    */
+  11:watchdog.c    **** /*                                                                      */
+  12:watchdog.c    **** /* Permission is hereby granted, free of charge, to any person          */
+  13:watchdog.c    **** /* obtaining a copy of this software and associated documentation       */
+  14:watchdog.c    **** /* files(the "Software"), to deal in the Software without restriction,  */
+  15:watchdog.c    **** /* including without limitation the rights to use, copy, modify, merge, */
+  16:watchdog.c    **** /* publish, distribute, sublicense, and/or sell copies of the Software, */
+  17:watchdog.c    **** /* and to permit persons to whom the Software is furnished to do so,    */
+  18:watchdog.c    **** /* subject to the following conditions:                                 */
+  19:watchdog.c    **** /*                                                                      */
+  20:watchdog.c    **** /* The above copyright notice and this permission notice shall be       */
+  21:watchdog.c    **** /* included in all copies or substantial portions of the Software.      */
+  22:watchdog.c    **** /*                                                                      */
+  23:watchdog.c    **** /* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,      */
+  24:watchdog.c    **** /* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF   */
+  25:watchdog.c    **** /* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND                */
+  26:watchdog.c    **** /* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS  */
+  27:watchdog.c    **** /* BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN   */
+  28:watchdog.c    **** /* ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN    */
+  29:watchdog.c    **** /* CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE     */
+  30:watchdog.c    **** /* SOFTWARE.                                                            */
+  31:watchdog.c    **** /*                                                                      */
+  32:watchdog.c    **** /************************************************************************/
+  33:watchdog.c    **** 
+  34:watchdog.c    **** #include "watchdog.h"
+  35:watchdog.c    **** 
+  36:watchdog.c    **** #ifdef __AVR_XMEGA__
+  37:watchdog.c    **** 
+  38:watchdog.c    **** void WDT_EnableAndSetTimeout( void )
+  39:watchdog.c    **** {
+ 411               	.LM0:
+ 412               	.LFBB1:
+ 413               	/* prologue: function */
+ 414               	/* frame size = 0 */
+ 415               	/* stack size = 0 */
+ 416               	.L__stack_usage = 0
+  40:watchdog.c    ****         uint8_t temp = WDT_ENABLE_bm | WDT_CEN_bm | WATCHDOG_TIMEOUT;
+  41:watchdog.c    ****         CCP = CCP_IOREG_gc;
+ 418               	.LM1:
+ 419 0000 88ED      		ldi r24,lo8(-40)
+ 420 0002 84BF      		out __CCP__,r24
+  42:watchdog.c    ****         WDT.CTRL = temp;
+ 422               	.LM2:
+ 423 0004 8FE1      		ldi r24,lo8(31)
+ 424 0006 8093 8000 		sts 128,r24
+ 425               	.L3:
+  43:watchdog.c    ****         
+  44:watchdog.c    ****         /* Wait for WD to synchronize with new settings. */
+  45:watchdog.c    ****         while(WDT_IsSyncBusy());
+ 427               	.LM3:
+ 428 000a 8091 8200 		lds r24,130
+ 429 000e 80FD      		sbrc r24,0
+ 430 0010 00C0      		rjmp .L3
+ 431               	/* epilogue start */
+  46:watchdog.c    **** }
+ 433               	.LM4:
+ 434 0012 0895      		ret
+ 436               	.Lscope1:
+ 437               		.section	.text.WDT_Disable,"ax",@progbits
+ 439               	.global	WDT_Disable
+ 441               	WDT_Disable:
+  47:watchdog.c    **** 
+  48:watchdog.c    **** void WDT_Disable( void )
+  49:watchdog.c    **** {
+ 443               	.LM5:
+ 444               	.LFBB2:
+ 445               	/* prologue: function */
+ 446               	/* frame size = 0 */
+ 447               	/* stack size = 0 */
+ 448               	.L__stack_usage = 0
+  50:watchdog.c    ****         uint8_t temp = (WDT.CTRL & ~WDT_ENABLE_bm) | WDT_CEN_bm;
+ 450               	.LM6:
+ 451 0000 E0E8      		ldi r30,lo8(-128)
+ 452 0002 F0E0      		ldi r31,0
+ 453 0004 8081      		ld r24,Z
+ 454 0006 8C7F      		andi r24,lo8(-4)
+ 455 0008 8160      		ori r24,lo8(1)
+  51:watchdog.c    ****         CCP = CCP_IOREG_gc;
+ 457               	.LM7:
+ 458 000a 98ED      		ldi r25,lo8(-40)
+ 459 000c 94BF      		out __CCP__,r25
+  52:watchdog.c    ****         WDT.CTRL = temp;
+ 461               	.LM8:
+ 462 000e 8083      		st Z,r24
+ 463 0010 0895      		ret
+ 468               	.Lscope2:
+ 469               		.text
+ 471               	.Letext0:
+ 472               		.ident	"GCC: (AVR_8_bit_GNU_Toolchain_3.4.4_1229) 4.8.1"
+DEFINED SYMBOLS
+                            *ABS*:00000000 watchdog.c
+C:\Users\Matthew\AppData\Local\Temp\ccXhDbG0.s:2      *ABS*:0000003e __SP_H__
+C:\Users\Matthew\AppData\Local\Temp\ccXhDbG0.s:3      *ABS*:0000003d __SP_L__
+C:\Users\Matthew\AppData\Local\Temp\ccXhDbG0.s:4      *ABS*:0000003f __SREG__
+C:\Users\Matthew\AppData\Local\Temp\ccXhDbG0.s:5      *ABS*:0000003b __RAMPZ__
+C:\Users\Matthew\AppData\Local\Temp\ccXhDbG0.s:6      *ABS*:00000034 __CCP__
+C:\Users\Matthew\AppData\Local\Temp\ccXhDbG0.s:7      *ABS*:00000000 __tmp_reg__
+C:\Users\Matthew\AppData\Local\Temp\ccXhDbG0.s:8      *ABS*:00000001 __zero_reg__
+C:\Users\Matthew\AppData\Local\Temp\ccXhDbG0.s:409    .text.WDT_EnableAndSetTimeout:00000000 WDT_EnableAndSetTimeout
+C:\Users\Matthew\AppData\Local\Temp\ccXhDbG0.s:441    .text.WDT_Disable:00000000 WDT_Disable
+
+NO UNDEFINED SYMBOLS
